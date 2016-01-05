@@ -3,6 +3,11 @@
 #If you build libarea from source and get errors, pull in CMakeLists.txt from here:
 #https://github.com/aewallin/libarea
 #and rebuild (cmake/make/make install)
+
+#Inkscape doesn't export DXF files quite as nicely as it should- look for DXF
+#export plugins... even then it's kinda iffy. Big Blue Saw DXF Exporter
+#seems to kinda work. Units are wonky, though that may well be this code...
+
 import area
 import copy
 import copy_reg
@@ -11,13 +16,13 @@ import math
 #from Tkinter import Tk, Canvas, Frame, BOTH
 from Tkinter import *
 
+#really just a copy function- doesn't actually use pickle
 def pickle_area(do):
 	a = area.Area()
 	for c in do.getCurves():
 		a.append(c)
 	return a
 
-#copy_reg.pickle(area.Area, pickle_area)
 
 toold = 6.35
 #toold = 3.175
@@ -37,10 +42,6 @@ canvas = Canvas(root, width=screenW, height=screenH)
 canvas.pack()
 canvas.bind("<Button-1>", lmouse_callback);
 canvas.bind("<Button-3>", rmouse_callback);
-#canvas.create_line(0,0,100,100)
-#canvas.create_line(10,0,110,100)
-#root.mainloop()
-
 
 
 
@@ -162,9 +163,6 @@ curvelist = areas[0].MakePocketToolpath(toold/2, 0.0, toold/2+0.5, False, False,
 #print type(curvelist[0])
 print "Found " + str(len(curvelist)) + " discrete section(s) to machine"
 
-#print curvelist
-#addLine(curvelist)
-#root.mainloop()
 
 pathlength = 0
 
