@@ -1,14 +1,44 @@
 #!/usr/bin/env python2
 
-#If you build libarea from source and get errors, pull in CMakeLists.txt from here:
-#https://github.com/aewallin/libarea
+#If you build libarea from source and get undefined symbol errors, pull
+#in CMakeLists.txt from here: https://github.com/aewallin/libarea
 #and rebuild (cmake/make/make install)
 
-#Inkscape doesn't export DXF files quite as nicely as it should- look for DXF
-#export plugins... even then it's kinda iffy. Big Blue Saw DXF Exporter
-#seems to kinda work. Units are wonky, though that may well be this code...
+#Otherwise, you should just use my modified version: https://github.com/dbtayl/libarea
+#This version is modified to have the correct CMakeLists.txt, as well as
+#to correctly read units from DXF files
+
+#Inkscape doesn't export DXF files quite as nicely as it should, at least
+#not any sort of complex stuff (eg, arcs)- look for DXF export plugins...
+#even then it's kinda iffy. Big Blue Saw DXF Exporter seems to kinda work.
+#Units are wonky, though that may well be this code...
+
+#For exporting slices from FreeCAD (for an STL), see:
+#http://forum.freecadweb.org/viewtopic.php?t=2891
+#m=App.ActiveDocument.ActiveObject.Mesh
+#s=m.crossSections([(App.Vector(0,0,0),App.Vector(0,0,1)),(App.Vector(0,0,1),App.Vector(0,0,1)),(App.Vector(0,0,2),App.Vector(0,0,1))])
+#for i in s:
+#    for j in i:
+#        if len(j) > 1:
+#            Part.show(Part.makePolygon(j))
+
+#Or, directly:
+#from FreeCAD import Base
+#
+#wires=list()
+#shape=FreeCAD.getDocument("Unnamed").Fusion.Shape
+#
+#for i in shape.slice(Base.Vector(0,0,1),5):
+#	wires.append(i)
+#
+#comp=Part.Compound(wires)
+#slice=FreeCAD.getDocument("Unnamed").addObject("Part::Feature","Fusion_cs")
+#slice.Shape=comp
+#slice.purgeTouched()
+#del slice,comp,wires,shape
 
 import area
+import argparse
 import copy
 import copy_reg
 import os.path
@@ -31,6 +61,15 @@ stepover = toold/2
 screenW = 800
 screenH = 480
 
+
+#Nicely handle command-line arguments
+parser=argparse.ArgumentParser(description="Create toolpaths and (hopefully someday) GCode from DXF files")
+parser.add_argument("inputfile", metavar="FILE.dxf", type=str, help="DXF file to generate toolpaths for")
+args = parser.parse_args()
+
+print "Input file is: " + args.inputfile
+
+
 def lmouse_callback(event):
 	print "YAY!"
 	
@@ -44,7 +83,9 @@ canvas.bind("<Button-1>", lmouse_callback);
 canvas.bind("<Button-3>", rmouse_callback);
 
 
-
+#Processes the segments of a curve and renders them to the screen
+#Also handles arcs
+#This has nothing to do with generating GCode
 def addLine(curve, scale=1.0):
 	lastx = 0
 	lasty = 0
@@ -99,25 +140,25 @@ def addLine(curve, scale=1.0):
 
 
 
-#Returns a list of curves that form the pocket
-#cutter radius- mm
-#extra material- mm?
-#stepover- mm
-#from center (bool)- doesn't seem to do anything
-#pocket mode (bool?) (????)
-#zig angle
+
 
 #a.MakePocketToolpath(toold/2, 0.0, 3.0, False, 0, 5.0)
 
-filename = "/tmp/novena-x-section3.dxf"
 
-if not os.path.isfile(filename):
-	print "Couldn't open DXF"
+if not os.path.isfile(args.inputfile):
+	print "Couldn't open file \"" + args.inputfile + "\""
 	exit(-1)
 
-newarea = area.AreaFromDxf(filename)
-area.set_units(1)
+#set_units doesn't actually seem to do anything
+#area.set_units(2)
+newarea = area.AreaFromDxf(args.inputfile)
 newarea.Reorder();
+
+box = area.Box()
+newarea.GetBox(box);
+
+print "Bounding box: " + str(box.MaxX() - box.MinX()) + " x " + str(box.MaxY() - box.MinY()) + "mm"
+#print "Units " + str(area.get_units())
 
 #One area for each polygon
 areas = newarea.Split();
@@ -156,8 +197,14 @@ if(len(areas) > 1):
 
 print "Done merging sections"
 
-#Returns a list of curves comprising the toolpath
-#Each part of the list is a disjoint chunk of the path?
+#Returns a list of curves that form the pocket. Args:
+#	cutter radius- mm
+#	extra material- mm?
+#	stepover- mm
+#	from center (bool)- doesn't seem to do anything
+#	pocket mode (bool?) (????)
+#	zig angle
+#Each part of the returned list is a disjoint chunk of the path?
 curvelist = areas[0].MakePocketToolpath(toold/2, 0.0, toold/2+0.5, False, False, 0.0)
 
 #print type(curvelist[0])
@@ -166,15 +213,17 @@ print "Found " + str(len(curvelist)) + " discrete section(s) to machine"
 
 pathlength = 0
 
+#Calculates the total length of all segments in the curve
 def sumLength(curve):
-	global pathlength
+	length = 0
 	for span in curve.GetSpans():
-		pathlength += span.Length()
+		length += span.Length()
+	return length
 
 for p in curvelist:
 	print "Curvelist iteration"
 	addLine(p,2)
-	sumLength(p)
+	pathlength += sumLength(p)
 
 #print area.get_units()
 print "Total path length: " + str(pathlength) + "mm\tCut time at " + str(feed) + "mm/min is " + str(pathlength/feed) + " min"
