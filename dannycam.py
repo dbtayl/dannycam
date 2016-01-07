@@ -8,22 +8,6 @@
 #This version is modified to have the correct CMakeLists.txt, as well as
 #to correctly read units from DXF files
 
-#Next comment left below so it gets committed, at least for a bit, but
-#the DXF "correctness" issues were definitely in part libarea's fault.
-#My version (above) also has a fix
-
-#Inkscape doesn't export DXF files quite as nicely as it should, at least
-#not any sort of complex stuff (eg, arcs)- look for DXF export plugins...
-#even then it's kinda iffy. Big Blue Saw DXF Exporter seems to kinda work.
-#it needs to be fixed, though (as of version 0.2):
-
-#http://www.inkscapeforum.com/viewtopic.php?t=19161
-#Essentially, the line in "inch_dxf_outlines.py" in the extensions folder,
-#h = inkex.unittouu(self.document.getroot().xpath('@height',namespaces=inkex.NSS)[0])
-#should read
-#h = self.unittouu(self.document.getroot().xpath('@height',namespaces=inkex.NSS)[0])
-#that is, replace the first "inkex" with "self", and save the file. Ensure that Inkscape isn't running while making the change.
-
 #For exporting slices from FreeCAD (for an STL), see:
 #http://forum.freecadweb.org/viewtopic.php?t=2891
 #m=App.ActiveDocument.ActiveObject.Mesh
@@ -63,27 +47,24 @@ def deepcopy_area(do):
 	return a
 
 
-toold = 6.35
-#toold = 3.175
-feed = (40 * 25.4)
-stepover = toold/2
-screenW = 800
-screenH = 480
-
 #Defaults
 DEFAULT_ZSAFE=25.4
 DEFAULT_FEED=30*25.4
 DEFAULT_TOOLD=6.35
 DEFAULT_STEPOVER=-1
+DEFAULT_CUTDEPTH=-1
+screenW = 800
+screenH = 480
 
 
 #Nicely handle command-line arguments
 parser=argparse.ArgumentParser(description="Create toolpaths and (hopefully someday) GCode from DXF files")
 parser.add_argument("inputfile", metavar="FILE.dxf", type=str, help="DXF file to generate toolpaths for")
-parser.add_argument("-f","--feed", metavar="FEED", default=DEFAULT_FEED, type=float, help=("Sets the feed rate (mm/min) for machining. Default " + str(DEFAULT_FEED) + " mm/min"))
-parser.add_argument("-z","--zsafe", metavar="HEIGHT", default=DEFAULT_ZSAFE, type=float, help=("Sets the safe height (mm) for rapid travel. Default " + str(DEFAULT_ZSAFE) + " mm"))
-parser.add_argument("-t","--toold", metavar="DIA", default=DEFAULT_TOOLD, type=float, help=("Sets the tool diameter (mm). Default " + str(DEFAULT_TOOLD) + " mm"))
+parser.add_argument("-c","--cutdepth", metavar="DEPTH", default=DEFAULT_CUTDEPTH, type=float, help=("Sets the cut depth of each pass (mm) for machining. Default ToolD/2 mm"))
+parser.add_argument("-f","--feed", metavar="FEED", default=DEFAULT_FEED, type=float, help=("Sets the feed rate (mm/min) for machining in the XY plane. Default " + str(DEFAULT_FEED) + " mm/min"))
 parser.add_argument("-s","--stepover", metavar="STEP", default=DEFAULT_STEPOVER, type=float, help=("Sets how much lateral material is removed per pass (mm). Default ToolD/2 mm"))
+parser.add_argument("-t","--toold", metavar="DIA", default=DEFAULT_TOOLD, type=float, help=("Sets the tool diameter (mm). Default " + str(DEFAULT_TOOLD) + " mm"))
+parser.add_argument("-z","--zsafe", metavar="HEIGHT", default=DEFAULT_ZSAFE, type=float, help=("Sets the safe height (mm) for rapid travel. Default " + str(DEFAULT_ZSAFE) + " mm"))
 args = parser.parse_args()
 
 
@@ -102,6 +83,17 @@ else:
 		print "ERROR: Specified stepover (" + str(args.stepover) + " mm) is greater than the tool diameter (" + str(toold) + " mm). Aborting!"
 		exit(-1)
 	stepover = args.stepover
+
+#Similarly, cutdepth needs special handling- default based on tool size
+if args.cutdepth <= 0:
+	print "Cut depth either not specified or negative; using default ToolD/10 (" + str(toold/10) + " mm)"
+	cutdepth = toold/10
+else:
+	if args.cutdepth > toold/2:
+		print "########"
+		print "WARNING: Specified cut depth (" + str(args.cutdepth) + " mm) is greater than ToolD/2 (" + str(toold/2) + " mm). This is generally frowned upon unless you're cutting very soft materials!"
+		print "########"
+	cutdepth = args.cutdepth
 
 print ""
 print "Input file is: " + str(inputfile)
@@ -185,10 +177,6 @@ def addLine(curve, scale=1.0):
 
 
 
-
-#a.MakePocketToolpath(toold/2, 0.0, 3.0, False, 0, 5.0)
-
-
 if not os.path.isfile(inputfile):
 	print "Couldn't open file \"" + inputfile + "\""
 	exit(-1)
@@ -205,30 +193,35 @@ if len(areas) == 0:
 	print "No areas in DXF file"
 	exit(-1)
 
-print "Split read DXF into " + str(len(areas)) + " section(s). Performing XOR operations",
+print "Split read DXF into " + str(len(areas)) + " section(s). Performing XOR operations"
 
 
 #XOR all of the sub-areas. Kind of hack-y, but should give a good approximation
 #of what was intended with the DXF
 if(len(areas) > 1):
 	j = 1;
-	while j < len(areas):
-		print ".",
+	count = len(areas)
+	while j < count:
+		#Flush the buffer so we know something is happening without waiting for newline
+		print str(j) + " / " + str(count)
+		sys.stdout.flush()
 		if type(areas[j]) == None:
 			print "NoneType... continue!"
 			continue
+		
+		#First add to the existing area
 		union = deepcopy_area(areas[j])
 		union.Union(areas[0])
 		#print "Len union: " + str(len(union.getCurves()))
 		
+		#Calculate parts to subtract, if any
 		intersect = deepcopy_area(areas[j])
 		intersect.Intersect(areas[0])
 		#print "Len intersect: " + str(len(intersect.getCurves()))
 		
+		#If there's something we should cut out, do it
 		if len(intersect.getCurves()) > 0:
 			union.Subtract(intersect)
-		#else:
-			#print "No intersect"
 		
 		areas[0] = union
 		
@@ -244,7 +237,7 @@ print " Done"
 #	pocket mode (bool?) (????)
 #	zig angle
 #Each part of the returned list is a disjoint chunk of the path?
-curvelist = areas[0].MakePocketToolpath(toold/2, 0.0, stepover, False, False, 0.0)
+curvelist = areas[0].MakePocketToolpath(toold/2., 0.0, stepover, False, False, 0.0)
 
 #print type(curvelist[0])
 print "Found " + str(len(curvelist)) + " discrete section(s) to machine"
@@ -266,10 +259,17 @@ for p in curvelist:
 
 
 #Print out some useful information about the job
+minutes = pathlength / feed
+hours = int(minutes)/60
+minutes -= hours * 60
+
 print ""
-print "Total path length: " + str("%.2f" % pathlength) + "mm\tCut time at " + str(feed) + "mm/min is " + str("%.2f" % (pathlength/feed)) + " min"
+print "Total path length: " + str("%.2f" % pathlength) + "mm\tCut time at " + str(feed) + "mm/min is " + str("%.2f" % (pathlength/feed)) + " min (" + str(hours) + "h " + str(int(minutes+0.5)) + "m)"
 box = area.Box()
 newarea.GetBox(box);
 print "Bounding box: " + str("%.2f" % (box.MaxX() - box.MinX())) + " x " + str("%.2f" % (box.MaxY() - box.MinY())) + "mm, LL corner at (" + str("%.2f" % box.MinX()) + ", " + str("%.2f" % box.MinY()) + ") mm"
+print ""
 
+
+#Show plot of generated toolpaths
 root.mainloop();
