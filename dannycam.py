@@ -34,6 +34,7 @@
 
 import area
 import argparse
+import gcode
 import os.path
 import math
 #from Tkinter import Tk, Canvas, Frame, BOTH
@@ -53,6 +54,7 @@ DEFAULT_FEED=30*25.4
 DEFAULT_TOOLD=6.35
 DEFAULT_STEPOVER=-1
 DEFAULT_CUTDEPTH=-1
+DEFAULT_RPM=10000
 screenW = 800
 screenH = 480
 
@@ -64,6 +66,7 @@ parser.add_argument("-c","--cutdepth", metavar="DEPTH", default=DEFAULT_CUTDEPTH
 parser.add_argument("-f","--feed", metavar="FEED", default=DEFAULT_FEED, type=float, help=("Sets the feed rate (mm/min) for machining in the XY plane. Default " + str(DEFAULT_FEED) + " mm/min"))
 parser.add_argument("-s","--stepover", metavar="STEP", default=DEFAULT_STEPOVER, type=float, help=("Sets how much lateral material is removed per pass (mm). Default ToolD/2 mm"))
 parser.add_argument("-t","--toold", metavar="DIA", default=DEFAULT_TOOLD, type=float, help=("Sets the tool diameter (mm). Default " + str(DEFAULT_TOOLD) + " mm"))
+parser.add_argument("-w","--rpm", metavar="RPM", default=DEFAULT_TOOLD, type=int, help=("Sets the spindle angular velocity (RPM). Default " + str(DEFAULT_RPM) + " RPM"))
 parser.add_argument("-z","--zsafe", metavar="HEIGHT", default=DEFAULT_ZSAFE, type=float, help=("Sets the safe height (mm) for rapid travel. Default " + str(DEFAULT_ZSAFE) + " mm"))
 args = parser.parse_args()
 
@@ -73,6 +76,7 @@ inputfile = args.inputfile
 toold = args.toold
 feed = args.feed
 zsafe = args.zsafe
+rpm = args.rpm
 
 #Stepover needs special handling- it can't be bigger than the tool
 if args.stepover <= 0:
@@ -101,6 +105,7 @@ print "Feed rate is: " + str(feed) + " mm/min"
 print "ZSafe is: " + str(zsafe) + " mm"
 print "ToolD is: " + str(toold) + " mm"
 print "Stepover is: " + str(stepover) + " mm"
+print "Spindle RPM is: " + str(rpm) + " RPM"
 print ""
 
 
@@ -203,7 +208,7 @@ if(len(areas) > 1):
 	count = len(areas)
 	while j < count:
 		#Flush the buffer so we know something is happening without waiting for newline
-		print str(j) + " / " + str(count)
+		print str(j) + " / " + str(count - 1)
 		sys.stdout.flush()
 		if type(areas[j]) == None:
 			print "NoneType... continue!"
@@ -227,7 +232,6 @@ if(len(areas) > 1):
 		
 		j += 1
 
-print " Done"
 
 #Returns a list of curves that form the pocket. Args:
 #	cutter radius- mm
@@ -237,6 +241,9 @@ print " Done"
 #	pocket mode (bool?) (????)
 #	zig angle
 #Each part of the returned list is a disjoint chunk of the path?
+
+print "Generating toolpaths"
+
 curvelist = areas[0].MakePocketToolpath(toold/2., 0.0, stepover, False, False, 0.0)
 
 #print type(curvelist[0])
@@ -254,13 +261,13 @@ def sumLength(curve):
 
 for p in curvelist:
 	#print "Curvelist iteration"
-	addLine(p,4)
+	addLine(p,3)
 	pathlength += sumLength(p)
 
 
 #Print out some useful information about the job
 minutes = pathlength / feed
-hours = int(minutes)/60
+hours = int(minutes) / 60
 minutes -= hours * 60
 
 print ""
@@ -270,6 +277,8 @@ newarea.GetBox(box);
 print "Bounding box: " + str("%.2f" % (box.MaxX() - box.MinX())) + " x " + str("%.2f" % (box.MaxY() - box.MinY())) + "mm, LL corner at (" + str("%.2f" % box.MinX()) + ", " + str("%.2f" % box.MinY()) + ") mm"
 print ""
 
+
+#gcode.generate(curvelist, zsafe, 0, 0.5, 1, 1000, 50, 6.35, 4, 10000)
 
 #Show plot of generated toolpaths
 root.mainloop();
