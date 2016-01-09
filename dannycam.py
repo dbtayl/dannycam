@@ -278,7 +278,7 @@ print "Bounding box: " + str("%.2f" % (box.MaxX() - box.MinX())) + " x " + str("
 print ""
 
 
-#gcode.generate(curvelist, zsafe, 0, 0.5, 1, 1000, 50, 6.35, 4, 10000)
+gcode.generate(curvelist, zsafe, 0, 0.5, 1, 1000, 50, 6.35, 4, 10000)
 
 #Show plot of generated toolpaths
 root.mainloop();
