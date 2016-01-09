@@ -1,6 +1,9 @@
 #This file contains functions for writing GCode
 #All of them are basically macros to output a GCode sequence
 
+#FIXME: A lot of useless default arguments could be removed via
+#http://stackoverflow.com/questions/14017996/python-optional-parameter 
+
 import math
 
 #Used basically to check if an argument was passed
@@ -110,12 +113,38 @@ def generate(curves, zsafe, zmin, zstep, zmax, feedxy, feedz, toolD, stepover, r
 		return ""
 	#FIXME: Check other variables as well...
 	
-	#FIXME: Need to generate setup GCode (units, tolerance, spindle speed, relative/absolute coords)
+	#G90 (absolute mode)
+	#G91.1 (relative offsets for arcs)
+	#G94 (Units per minute mode)
+	#G97 S<SPEED> (Spindle speed in RPM)
+	#G21 (mm units)
+	#G40 (no cutter comp)
+	#G64 P0.01 (set path tolerance to 0.01 mm of specified)
+	#G17 (use XY plane)
+	
+	
+	
+	#FIXME: Add M[345] spindle control commands
+	#FIXME: Make path tolerance an argument
 	
 	setZsafe(zsafe)
 	setFeedXY(feedxy)
 	setFeedZ(feedz)
 	cmds = ""
+	
+	#Preamble
+	cmds += "G90\t(Absolute mode)\n"
+	cmds += "G91.1\t(Relative arc offsets)\n"
+	cmds += "G94\t(Units/minute mode)\n"
+	cmds += "G97 S" + str(rpm) + "\t(Set spindle speed)\n"
+	cmds += "G21\t(units are mm)\n"
+	cmds += "G40\t(no cutter comp)\n"
+	cmds += "G64 P0.01\t(set path tolerance)\n"
+	cmds += "G17\t(Use XY plane for arcs)\n"
+	cmds += "\n"
+	
+	
+	
 	#FIXME: Will need to iterate over this
 	workZ = max(zmax - zstep, zmin)
 	for c in curves:
@@ -137,8 +166,7 @@ def generate(curves, zsafe, zmin, zstep, zmax, feedxy, feedz, toolD, stepover, r
 				cmds += feed(verts[i].p.x, verts[i].p.y)
 			#Arc; CW = 1, CCW = -1
 			elif abs(verts[i].type) == 1:
-				ccw = (verts[i].type == -1)
-				#FIXME
+				ccw = (verts[i].type == 1)
 				cmds += arc(verts[i].c.x, verts[i].c.y, verts[i-1].p.x, verts[i-1].p.y, verts[i].p.x, verts[i].p.y, ccw=ccw)
 			#No idea... abort
 			else:
@@ -148,5 +176,8 @@ def generate(curves, zsafe, zmin, zstep, zmax, feedxy, feedz, toolD, stepover, r
 			i += 1
 	#At the end of the code, retract
 	cmds += goZsafe()
+	
+	#Add "end of program
+	cmds += "\nM2\n"
 			
-	print cmds
+	return cmds

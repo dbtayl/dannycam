@@ -61,7 +61,8 @@ screenH = 480
 
 #Nicely handle command-line arguments
 parser=argparse.ArgumentParser(description="Create toolpaths and (hopefully someday) GCode from DXF files")
-parser.add_argument("inputfile", metavar="FILE.dxf", type=str, help="DXF file to generate toolpaths for")
+parser.add_argument("inputfile", metavar="IN.dxf", type=str, help="DXF file to generate toolpaths for")
+parser.add_argument("outputfile", metavar="OUT.ngc", type=str, help='GCode output file, default ${IN%%.dxf}.ngc', nargs="?")
 parser.add_argument("-c","--cutdepth", metavar="DEPTH", default=DEFAULT_CUTDEPTH, type=float, help=("Sets the cut depth of each pass (mm) for machining. Default ToolD/2 mm"))
 parser.add_argument("-f","--feed", metavar="FEED", default=DEFAULT_FEED, type=float, help=("Sets the feed rate (mm/min) for machining in the XY plane. Default " + str(DEFAULT_FEED) + " mm/min"))
 parser.add_argument("-s","--stepover", metavar="STEP", default=DEFAULT_STEPOVER, type=float, help=("Sets how much lateral material is removed per pass (mm). Default ToolD/2 mm"))
@@ -77,6 +78,20 @@ toold = args.toold
 feed = args.feed
 zsafe = args.zsafe
 rpm = args.rpm
+
+#Output file may need special handling- if not passed, use input filename,
+#replacing ".dxf" with".ngc"
+#Otherwise, use argument passed
+if args.outputfile == None:
+	outputfile = inputfile.split(".dxf")[0] + ".ngc"
+else:
+	outputfile = args.outputfile
+
+#Before doing too much work, check to see if we can even open the requested output file
+fout = open(outputfile, 'w');
+if fout.closed:
+	print "Couldn't open output file " + outputfile + "; aborting"
+	exit(-1)
 
 #Stepover needs special handling- it can't be bigger than the tool
 if args.stepover <= 0:
@@ -143,6 +158,7 @@ def addLine(curve, scale=1.0):
 		#Arcs are a pain- find the center+radius, calculate end points, ...
 		#The directions, addition vs subtraction, start vs end points, etc. were largely trial-and-error to get right
 		#They may well be done in a logically-correct, but humanl-readably-awful manner
+		#1 is CCW, -1 is CW
 		elif verts[i].type == 1 or verts[i].type == -1:
 			centerx = verts[i].c.x * scale
 			centery = verts[i].c.y * scale
@@ -160,11 +176,13 @@ def addLine(curve, scale=1.0):
 			#print "Calculated extent: " + str(extent)
 			if extent < 0:
 				extent = startangle - endangle
+			#CCW
 			if verts[i].type == 1:
 				if startangle > endangle:
 					canvas.create_arc(centerx - radius, centery-radius, centerx+radius, centery+radius, start=endangle, extent=extent, style = wedgestyle)
 				else:
 					canvas.create_arc(centerx - radius, centery-radius, centerx+radius, centery+radius, start=endangle, extent=360-extent, style = wedgestyle)
+			#CW
 			else:
 				#print "WARNING: Clockwise arc detected! This is only loosely tested!"
 				if startangle > endangle:
@@ -265,6 +283,18 @@ for p in curvelist:
 	pathlength += sumLength(p)
 
 
+
+#Generate actual gcode listing
+print "Generating gcode"
+cmds = gcode.generate(curvelist, zsafe, 0, 0.5, 1, 1000, 50, 6.35, 4, 10000)
+
+#Write it out to a file
+print "Writing file"
+fout.write(cmds)
+fout.close()
+
+
+
 #Print out some useful information about the job
 minutes = pathlength / feed
 hours = int(minutes) / 60
@@ -277,8 +307,6 @@ newarea.GetBox(box);
 print "Bounding box: " + str("%.2f" % (box.MaxX() - box.MinX())) + " x " + str("%.2f" % (box.MaxY() - box.MinY())) + "mm, LL corner at (" + str("%.2f" % box.MinX()) + ", " + str("%.2f" % box.MinY()) + ") mm"
 print ""
 
-
-gcode.generate(curvelist, zsafe, 0, 0.5, 1, 1000, 50, 6.35, 4, 10000)
 
 #Show plot of generated toolpaths
 root.mainloop();
