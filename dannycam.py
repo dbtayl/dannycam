@@ -63,6 +63,7 @@ screenH = 480
 parser=argparse.ArgumentParser(description="Create toolpaths and (hopefully someday) GCode from DXF files")
 parser.add_argument("inputfile", metavar="IN.dxf", type=str, help="DXF file to generate toolpaths for")
 parser.add_argument("outputfile", metavar="OUT.ngc", type=str, help='GCode output file, default ${IN%%.dxf}.ngc', nargs="?")
+parser.add_argument("--climb", dest="climb", action="store_true", help="Use climb milling instead of conventional (default: conventional)")
 parser.add_argument("-c","--cutdepth", metavar="DEPTH", default=DEFAULT_CUTDEPTH, type=float, help=("Sets the cut depth of each pass (mm) for machining. Default ToolD/2 mm"))
 parser.add_argument("-f","--feed", metavar="FEED", default=DEFAULT_FEED, type=float, help=("Sets the feed rate (mm/min) for machining in the XY plane. Default " + str(DEFAULT_FEED) + " mm/min"))
 parser.add_argument("-s","--stepover", metavar="STEP", default=DEFAULT_STEPOVER, type=float, help=("Sets how much lateral material is removed per pass (mm). Default ToolD/2 mm"))
@@ -78,6 +79,7 @@ toold = args.toold
 feed = args.feed
 zsafe = args.zsafe
 rpm = args.rpm
+climb = args.climb
 
 #Output file may need special handling- if not passed, use input filename,
 #replacing ".dxf" with".ngc"
@@ -256,13 +258,24 @@ if(len(areas) > 1):
 #	extra material- mm?
 #	stepover- mm
 #	from center (bool)- doesn't seem to do anything
-#	pocket mode (bool?) (????)
+#	pocket mode (bool?) (true = zig_zag, false=spiral)
 #	zig angle
 #Each part of the returned list is a disjoint chunk of the path?
 
 print "Generating toolpaths"
 
 curvelist = areas[0].MakePocketToolpath(toold/2., 0.0, stepover, False, False, 0.0)
+
+#Make sure curves go in the direction we want
+#We're either cutting full-width slots OR reducing profiles- thus CLOCKWISE
+#is CLIMB milling, and COUNTERCLOCKWISE is CONVENTIONAL milling
+for c in curvelist:
+	if(climb):
+		if not c.IsClockwise():
+			c.Reverse()
+	else:
+		if c.IsClockwise():
+			c.Reverse()
 
 #print type(curvelist[0])
 print "Found " + str(len(curvelist)) + " discrete section(s) to machine"
