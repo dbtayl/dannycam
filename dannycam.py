@@ -286,7 +286,8 @@ for p in curvelist:
 
 #Generate actual gcode listing
 print "Generating gcode"
-cmds = gcode.generate(curvelist, zsafe, 0, 0.5, 1, 1000, 50, 6.35, 4, 10000)
+#def generate(curves, zsafe, zmin, zstep, zmax, feedxy, feedz, toolD, stepover, rpm):
+cmds = gcode.generate(curvelist, zsafe, 0, 0.5, 1, feed, 50, toold, stepover, rpm)
 
 #Write it out to a file
 print "Writing file"

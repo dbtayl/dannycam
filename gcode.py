@@ -1,17 +1,12 @@
 #This file contains functions for writing GCode
 #All of them are basically macros to output a GCode sequence
 
-#FIXME: A lot of useless default arguments could be removed via
-#http://stackoverflow.com/questions/14017996/python-optional-parameter 
-
 import math
 
-#Used basically to check if an argument was passed
-DEFAULT_VAL = -100000
-
-feedxy = 1
-feedz = 1
-zsafe = 100000
+#Default to None, since these all should be set before making GCode
+feedxy = None
+feedz = None
+zsafe = None
 
 #Sets the XY or Z feed rates, in mm/min
 def setFeedXY(f):
@@ -24,14 +19,14 @@ def setFeedZ(f):
 
 	
 #Perform a rapid move
-def rapid(x=DEFAULT_VAL, y=DEFAULT_VAL, z=DEFAULT_VAL):
+def rapid(x=None, y=None, z=None):
 	retstr = "G00"
-	if (x != DEFAULT_VAL) or (y != DEFAULT_VAL) or (z != DEFAULT_VAL):
-		if (x != DEFAULT_VAL):
+	if (x != None) or (y != None) or (z != None):
+		if (x != None):
 			retstr += " X" + str(x)
-		if (y != DEFAULT_VAL):
+		if (y != None):
 			retstr += " Y" + str(y)
-		if (z != DEFAULT_VAL):
+		if (z != None):
 			retstr += " Z" + str(z)
 	else:
 		return ""
@@ -47,20 +42,20 @@ def setZsafe(z):
 
 
 #Perform a linear feed
-def feed(x=DEFAULT_VAL, y=DEFAULT_VAL, z=DEFAULT_VAL):
+def feed(x=None, y=None, z=None):
 	global feedxy
 	retstr = "G01 F"
-	if(x == DEFAULT_VAL) and (y == DEFAULT_VAL):
+	if(x == None) and (y == None):
 		retstr += str(feedz)
 	else:
 		retstr += str(feedxy)
 	
-	if (x != DEFAULT_VAL) or (y != DEFAULT_VAL) or (z != DEFAULT_VAL):
-		if (x != DEFAULT_VAL):
+	if (x != None) or (y != None) or (z != None):
+		if (x != None):
 			retstr += " X" + str(x)
-		if (y != DEFAULT_VAL):
+		if (y != None):
 			retstr += " Y" + str(y)
-		if (z != DEFAULT_VAL):
+		if (z != None):
 			retstr += " Z" + str(z)
 	else:
 		return ""
@@ -70,7 +65,7 @@ def feed(x=DEFAULT_VAL, y=DEFAULT_VAL, z=DEFAULT_VAL):
 #Perform an arc
 #Assumes XY plane or helix around Z
 #Don't worry about starting Z- assume that's dealt with elsewhere
-def arc(cx, cy, sx, sy, ex, ey, ez=DEFAULT_VAL, ccw=False):
+def arc(cx, cy, sx, sy, ex, ey, ez=None, ccw=False):
 	#If start/end radii aren't within eps, abort
 	eps = 0.01
 	if (math.sqrt((cx - sx)**2 + (cy - sy)**2) - math.sqrt((cx - ex)**2 + (cy - ey)**2)) >= eps:
@@ -89,7 +84,7 @@ def arc(cx, cy, sx, sy, ex, ey, ez=DEFAULT_VAL, ccw=False):
 	retstr += " X" + str(ex) + " Y" + str(ey)
 	
 	#Helix if requested
-	if ez != DEFAULT_VAL:
+	if ez != None:
 		retstr += " Z" + str(ez)
 	
 	#Append center offsets
@@ -100,6 +95,8 @@ def arc(cx, cy, sx, sy, ex, ey, ez=DEFAULT_VAL, ccw=False):
 
 #Function that calls all the others- parses a bunch of libarea curves denoting
 #GCode paths, and generates the actual calls for them
+#NOTE: Some parameters are kind of redundant- like toolD. They're kept for
+#future use (eg, for safely ramping or running sanity checks)
 def generate(curves, zsafe, zmin, zstep, zmax, feedxy, feedz, toolD, stepover, rpm):
 	#Do some basic sanity checks
 	if(feedxy <= 0):
@@ -111,7 +108,11 @@ def generate(curves, zsafe, zmin, zstep, zmax, feedxy, feedz, toolD, stepover, r
 	if(zsafe <= zmax):
 		print "ERROR: ZSafe must be above milling height. ZSafe=" + str(zsafe) + ", zmax=" + str(zmax)
 		return ""
-	#FIXME: Check other variables as well...
+	if(stepover > toolD):
+		print "ERROR: Stepover should be less than the tool diameter! Tool: " + str(toolD) + ", stepover: " + str(stepover)
+		return ""
+	#Don't try to check IPT or zstep relative to toolD- assume user knows
+	#what they're doing. We don't know their setup or material
 	
 	#G90 (absolute mode)
 	#G91.1 (relative offsets for arcs)
@@ -157,7 +158,7 @@ def generate(curves, zsafe, zmin, zstep, zmax, feedxy, feedz, toolD, stepover, r
 		
 		#Go to the start of the curve
 		cmds += rapid(verts[0].p.x, verts[0].p.y)
-		#FIXME: Plunge here
+		#FIXME: Real plunge here- ramping would be good
 		cmds += feed(z=workZ)
 		i = 1
 		while i < len(verts):
