@@ -2,5 +2,8 @@ Possibly incomplete or out-of-date TODO list
 
 -Depth iteration (eg, real pockets)
 -Finishing passes
--Ramping into material
+-Ramping into material (plunges)
+	-Helical partially implemented
+-Ramping into material (clearing pockets, same-Z)
+-Less abrupt direction changes- eg, arcs between line segments
 -Handling 3D files (maybe someday)

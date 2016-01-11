@@ -2,11 +2,16 @@
 #All of them are basically macros to output a GCode sequence
 
 import math
+import area
 
 #Default to None, since these all should be set before making GCode
 feedxy = None
 feedz = None
 zsafe = None
+
+plungeStraight = 0
+plungeHelical = 1
+plungeRamp = 2
 
 #Sets the XY or Z feed rates, in mm/min
 def setFeedXY(f):
@@ -93,11 +98,36 @@ def arc(cx, cy, sx, sy, ex, ey, ez=None, ccw=False):
 	return retstr + "\n"
 
 
+
+#Attempts to find a suitable location to helically plunge
+#curve: a curve to find a plunge location for- this is a TOOLPATH, so we can touch the outside if we have to
+#toolD: the diameter of the cutter to plunge with. Assume space needed is a circle ~2*toolD
+#Returns: area.Point of the center of the plunge
+def helixPos(curve, toolD):
+	#Turn the milling curve into an area
+	curveArea = area.Area()
+	curveArea.append(curve)
+	
+	#Offset- "curveArea" is already at the limits of what we can machine-
+	#toolD/2 from the edge. We need 2 toolD for the hole, split across both
+	#sides, so offset another 1.5/2 = 0.75 toolD
+	#My logic on this is fuzzy, but a quick test shows this number seems
+	#to be right
+	curveArea.Offset(toolD * 0.75)
+	
+	#Presumably this will be null if we can't shrink it enough
+	if curveArea.num_curves() == 0:
+		return None
+	
+	#Otherwise, it's all good, and we can just return the first point
+	return curveArea.getCurves()[0].getVertices()[0].p
+
+
 #Function that calls all the others- parses a bunch of libarea curves denoting
 #GCode paths, and generates the actual calls for them
 #NOTE: Some parameters are kind of redundant- like toolD. They're kept for
 #future use (eg, for safely ramping or running sanity checks)
-def generate(curves, zsafe, zmin, zstep, zmax, feedxy, feedz, toolD, stepover, rpm):
+def generate(curves, zsafe, zmin, zstep, zmax, feedxy, feedz, toolD, stepover, rpm, plungeType):
 	#Do some basic sanity checks
 	if(feedxy <= 0):
 		print "ERROR: FeedXY must be positive."
@@ -154,12 +184,74 @@ def generate(curves, zsafe, zmin, zstep, zmax, feedxy, feedz, toolD, stepover, r
 		#FIXME: A better version would check if that's actually necessary first
 		cmds += goZsafe()
 		
+		#Set our starting "previous" point
 		last = verts[0].p
 		
 		#Go to the start of the curve
 		cmds += rapid(verts[0].p.x, verts[0].p.y)
-		#FIXME: Real plunge here- ramping would be good
-		cmds += feed(z=workZ)
+		
+		#FIXME: Rapid move down to a little bit above the actual start of
+		#the cut!
+		
+		#Straight plunge- hard on tools. Don't do this if it can be avoided
+		if plungeType == plungeStraight:
+			cmds += feed(z=workZ)
+		#Helical plunge- good! Assuming there's space to do it...
+		elif plungeType == plungeHelical:
+			plungePos = helixPos(c, toolD)
+			if plungePos == None:
+				#FIXME: Go to linear ramp- not straight
+				print "Couldn't find place to helix-plunge- defaulting to straight. FIXME!"
+				cmds += feed(z=workZ)
+			else:
+				print "Should be able to helically plunge at " + str(plungePos.x) + ", " + str(plungePos.y)
+				#FIXME: Want this fudge-factor in there? Constant offset? Variable?
+				#Probably want SOMETHING so that we don't end up with a little chunk left in the middle
+				fudge = 1.
+				helixX = plungePos.x + toolD/2. * fudge
+				helixY = plungePos.y + toolD/2. * fudge
+				
+				#FIXME: Probably want variable ramp angle
+				#Degrees
+				rampAngle = 5
+				helixCirc = math.pi * toolD * fudge
+				dzPerRev = math.sin(rampAngle/180. * math.pi) * helixCirc
+				
+				#Go to the start of the helix position
+				cmds += rapid(helixX, helixY)
+				
+				#FIXME: Iterate over Z here
+				#FIXME: These will need to change!
+				destZ = workZ
+				curZ = max(zsafe - dzPerRev, destZ)
+				done = False
+				while not done:
+					done = (curZ == destZ)
+					cmds += arc(plungePos.x, plungePos.y, helixX, helixY, helixX, helixY, ez = curZ, ccw=True)
+					curZ = max(curZ - dzPerRev, destZ)
+					
+				#FIXME: Remember to move back to the start of the curve!
+				#This is really important... Maybe not the start of the
+				#curve, but SOMEWHERE on it. And then somehow reset where
+				#the start is so it machines everything out.
+		#Linear ramp plunge- fallback from helical. Or if requested.
+		elif plungeType == plungeRamp:
+			print "Linear ramp plunging not supported; aborting"
+			return ""
+		else:
+			print "Unknown plunge argument passed: " + str(plungeType)
+			print "Aborting"
+			return ""
+		
+
+		
+		#Naive ramping: Follow the curve at a x% grade until you've ramped
+		#zstep/2, then go backwards the other half
+		#A smarter version would look for a place to helix in. How to do
+		#that isn't obvious
+		#Check that- maybe a probe grid and the "PointToPerim" function
+		#could find a spot to helix in
+		
 		i = 1
 		while i < len(verts):
 			#Linear feed
