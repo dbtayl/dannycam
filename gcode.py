@@ -109,11 +109,10 @@ def helixPos(curve, toolD):
 	curveArea.append(curve)
 	
 	#Offset- "curveArea" is already at the limits of what we can machine-
-	#toolD/2 from the edge. We need 2 toolD for the hole, split across both
-	#sides, so offset another 1.5/2 = 0.75 toolD
-	#My logic on this is fuzzy, but a quick test shows this number seems
-	#to be right
-	curveArea.Offset(toolD * 0.75)
+	#toolD/2 from the edge. Since the helix is 2 toolD in diameter, we
+	#need to be toolD from the edge of the pocket, or another toolD/2 from
+	#the milling path.
+	curveArea.Offset(toolD * 0.5)
 	
 	#Presumably this will be null if we can't shrink it enough
 	if curveArea.num_curves() == 0:
@@ -207,9 +206,9 @@ def generate(curves, zsafe, zmin, zstep, zmax, feedxy, feedz, toolD, stepover, r
 				print "Should be able to helically plunge at " + str(plungePos.x) + ", " + str(plungePos.y)
 				#FIXME: Want this fudge-factor in there? Constant offset? Variable?
 				#Probably want SOMETHING so that we don't end up with a little chunk left in the middle
-				fudge = 1.
+				fudge = 0.95
 				helixX = plungePos.x + toolD/2. * fudge
-				helixY = plungePos.y + toolD/2. * fudge
+				helixY = plungePos.y;
 				
 				#FIXME: Probably want variable ramp angle
 				#Degrees
