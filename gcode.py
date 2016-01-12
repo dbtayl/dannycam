@@ -119,7 +119,52 @@ def helixPos(curve, toolD):
 		return None
 	
 	#Otherwise, it's all good, and we can just return the first point
-	return curveArea.getCurves()[0].getVertices()[0].p
+	helixPt = curveArea.getCurves()[0].getVertices()[0].p
+	
+	#We'll also need to find the index of the original curve that's closest
+	#to our helix so we don't end up machining a line to the old starting
+	#point
+	
+	#Find the closest point... or one close enough
+	i = 0;
+	bestd = 1000000000
+	nv = curve.getNumVertices()
+	verts = curve.getVertices()
+	bestidx = 0
+	while i < nv:
+		d = verts[i].p.dist(helixPt)
+		if d < toolD/2.:
+			bestidx = i
+			break
+		elif d < bestd:
+			bestd = d
+			bestidx = i
+		i += 1
+	
+	#Adjust the curve to start at that point
+	#setCurveStart(curve, bestidx)
+	print "Curve start before shift: " + str(verts[0].p.x) + "," + str(verts[0].p.y)
+	curve.shiftStart(bestidx)
+	verts = curve.getVertices()
+	print "Curve start after shift: " + str(verts[0].p.x) + "," + str(verts[0].p.y)
+	
+	return helixPt
+
+
+#This function adjusts the curve so that it starts at the index specified
+def setCurveStart(curve, idx):
+	#Curves are closed- remove redundant last entry
+	curve.pop()
+	
+	#Until we get to the starting point, pop entries off the front and stick them on the back
+	i = 0
+	while i < idx:
+		curve.append(curve.pop(0))
+		i += 1
+	
+	#Now the point we want to start is at the start... but we also want
+	#a copy of it at the end.
+	curve.append(curve[0])
 
 
 #Function that calls all the others- parses a bunch of libarea curves denoting
@@ -186,14 +231,13 @@ def generate(curves, zsafe, zmin, zstep, zmax, feedxy, feedz, toolD, stepover, r
 		#Set our starting "previous" point
 		last = verts[0].p
 		
-		#Go to the start of the curve
-		cmds += rapid(verts[0].p.x, verts[0].p.y)
-		
 		#FIXME: Rapid move down to a little bit above the actual start of
 		#the cut!
 		
 		#Straight plunge- hard on tools. Don't do this if it can be avoided
 		if plungeType == plungeStraight:
+			#Go to the start of the curve
+			cmds += rapid(verts[0].p.x, verts[0].p.y)
 			cmds += feed(z=workZ)
 		#Helical plunge- good! Assuming there's space to do it...
 		elif plungeType == plungeHelical:
@@ -201,6 +245,7 @@ def generate(curves, zsafe, zmin, zstep, zmax, feedxy, feedz, toolD, stepover, r
 			if plungePos == None:
 				#FIXME: Go to linear ramp- not straight
 				print "Couldn't find place to helix-plunge- defaulting to straight. FIXME!"
+				cmds += rapid(verts[0].p.x, verts[0].p.y)
 				cmds += feed(z=workZ)
 			else:
 				print "Should be able to helically plunge at " + str(plungePos.x) + ", " + str(plungePos.y)
@@ -228,13 +273,17 @@ def generate(curves, zsafe, zmin, zstep, zmax, feedxy, feedz, toolD, stepover, r
 					done = (curZ == destZ)
 					cmds += arc(plungePos.x, plungePos.y, helixX, helixY, helixX, helixY, ez = curZ, ccw=True)
 					curZ = max(curZ - dzPerRev, destZ)
-					
+				
+				cmds += feed(c.getVertices()[0].p.x, c.getVertices()[0].p.y)
+				
 				#FIXME: Remember to move back to the start of the curve!
 				#This is really important... Maybe not the start of the
 				#curve, but SOMEWHERE on it. And then somehow reset where
 				#the start is so it machines everything out.
 		#Linear ramp plunge- fallback from helical. Or if requested.
 		elif plungeType == plungeRamp:
+			#Go to the start of the curve
+			cmds += rapid(verts[0].p.x, verts[0].p.y)
 			print "Linear ramp plunging not supported; aborting"
 			return ""
 		else:
@@ -242,16 +291,11 @@ def generate(curves, zsafe, zmin, zstep, zmax, feedxy, feedz, toolD, stepover, r
 			print "Aborting"
 			return ""
 		
-
-		
-		#Naive ramping: Follow the curve at a x% grade until you've ramped
-		#zstep/2, then go backwards the other half
-		#A smarter version would look for a place to helix in. How to do
-		#that isn't obvious
-		#Check that- maybe a probe grid and the "PointToPerim" function
-		#could find a spot to helix in
 		
 		i = 1
+		#Get a fresh copy of vertices- we've tweaked them with plunges!
+		#FIXME: There has to be a better way to do this
+		verts = c.getVertices()
 		while i < len(verts):
 			#Linear feed
 			if verts[i].type == 0:

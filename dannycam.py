@@ -56,7 +56,7 @@ DEFAULT_STEPOVER=-1
 DEFAULT_CUTDEPTH=-1
 DEFAULT_RPM=10000
 screenW = 800
-screenH = 480
+screenH = 600
 
 
 #Nicely handle command-line arguments
