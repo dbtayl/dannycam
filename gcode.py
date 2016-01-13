@@ -24,18 +24,18 @@ def rapid(x=None, y=None, z=None):
 	retstr = "G00"
 	if (x != None) or (y != None) or (z != None):
 		if (x != None):
-			retstr += " X" + str(x)
+			retstr += " X" + str("%.3f" % x)
 		if (y != None):
-			retstr += " Y" + str(y)
+			retstr += " Y" + str("%.3f" % y)
 		if (z != None):
-			retstr += " Z" + str(z)
+			retstr += " Z" + str("%.3f" % z)
 	else:
 		return ""
 	return retstr + "\n"
 
 #Going to ZSafe might as well have its own function, save some typing
 def goZsafe():
-	return "G00 F" + str(feedz) + " Z" + str(zsafe) + "\n"
+	return "G00 F" + str("%.3f" % feedz) + " Z" + str("%.3f" % zsafe) + "\n"
 
 def setZsafe(z):
 	global zsafe
@@ -47,17 +47,17 @@ def feed(x=None, y=None, z=None):
 	global feedxy
 	retstr = "G01 F"
 	if(x == None) and (y == None):
-		retstr += str(feedz)
+		retstr += str("%.3f" % feedz)
 	else:
-		retstr += str(feedxy)
+		retstr += str("%.3f" % feedxy)
 	
 	if (x != None) or (y != None) or (z != None):
 		if (x != None):
-			retstr += " X" + str(x)
+			retstr += " X" + str("%.3f" % x)
 		if (y != None):
-			retstr += " Y" + str(y)
+			retstr += " Y" + str("%.3f" % y)
 		if (z != None):
-			retstr += " Z" + str(z)
+			retstr += " Z" + str("%.3f" % z)
 	else:
 		return ""
 	return retstr + "\n"
@@ -82,14 +82,14 @@ def arc(cx, cy, sx, sy, ex, ey, ez=None, ccw=False):
 	retstr += str(feedxy)
 	
 	#End location
-	retstr += " X" + str(ex) + " Y" + str(ey)
+	retstr += " X" + str("%.3f" % ex) + " Y" + str("%.3f" % ey)
 	
 	#Helix if requested
 	if ez != None:
-		retstr += " Z" + str(ez)
+		retstr += " Z" + str("%.3f" % ez)
 	
 	#Append center offsets
-	retstr += " I" + str(cx - sx) + " J" + str(cy - sy)
+	retstr += " I" + str("%.3f" % (cx - sx)) + " J" + str("%.3f" % (cy - sy))
 	
 	return retstr + "\n"
 
@@ -139,28 +139,11 @@ def helixPos(curve, toolD):
 	
 	#Adjust the curve to start at that point
 	#setCurveStart(curve, bestidx)
-	print "Curve start before shift: " + str(verts[0].p.x) + "," + str(verts[0].p.y)
 	curve.shiftStart(bestidx)
 	verts = curve.getVertices()
-	print "Curve start after shift: " + str(verts[0].p.x) + "," + str(verts[0].p.y)
 	
 	return helixPt
 
-
-#This function adjusts the curve so that it starts at the index specified
-def setCurveStart(curve, idx):
-	#Curves are closed- remove redundant last entry
-	curve.pop()
-	
-	#Until we get to the starting point, pop entries off the front and stick them on the back
-	i = 0
-	while i < idx:
-		curve.append(curve.pop(0))
-		i += 1
-	
-	#Now the point we want to start is at the start... but we also want
-	#a copy of it at the end.
-	curve.append(curve[0])
 
 #Returns code to helically plunge, if possible
 #destZ is the milling level
