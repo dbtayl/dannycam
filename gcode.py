@@ -9,10 +9,6 @@ feedxy = None
 feedz = None
 zsafe = None
 
-plungeStraight = 0
-plungeHelical = 1
-plungeRamp = 2
-
 #Sets the XY or Z feed rates, in mm/min
 def setFeedXY(f):
 	global feedxy
@@ -166,12 +162,49 @@ def setCurveStart(curve, idx):
 	#a copy of it at the end.
 	curve.append(curve[0])
 
+#Returns code to helically plunge, if possible
+#destZ is the milling level
+#startZ is the height we can safely feed down to before helix-ing
+def helicalPlunge(curve, toolD, rampangle, destZ, startZ):
+	helixCmds = ""
+	plungePos = helixPos(curve, toolD)
+	if(plungePos == None):
+		return None
+	
+	#FIXME: Want this fudge-factor in there? Constant offset? Variable?
+	#Probably want SOMETHING so that we don't end up with a little chunk left in the middle
+	fudge = 0.95
+	helixX = plungePos.x + toolD/2. * fudge
+	helixY = plungePos.y;
+	
+	helixCirc = math.pi * toolD * fudge
+	dzPerRev = math.sin(rampangle/180. * math.pi) * helixCirc
+
+	#Go to the start of the helix position
+	helixCmds += rapid(helixX, helixY)
+	helixCmds += rapid(z=startZ)
+	
+	#Helix as required to get to the requested depth
+	curZ = max(startZ-dzPerRev, destZ)
+	done = False
+	while not done:
+		done = (curZ == destZ)
+		helixCmds += arc(plungePos.x, plungePos.y, helixX, helixY, helixX, helixY, ez = curZ, ccw=True)
+		curZ = max(curZ - dzPerRev, destZ)
+	
+	#Feed back to the start of the curve. This shouldn't be far
+	helixCmds += feed(curve.getVertices()[0].p.x, curve.getVertices()[0].p.y)
+	
+	return helixCmds
+	
+	
+	
 
 #Function that calls all the others- parses a bunch of libarea curves denoting
 #GCode paths, and generates the actual calls for them
 #NOTE: Some parameters are kind of redundant- like toolD. They're kept for
 #future use (eg, for safely ramping or running sanity checks)
-def generate(curves, zsafe, zmin, zstep, zmax, feedxy, feedz, toolD, stepover, rpm, plungeType):
+def generate(curves, zsafe, zmin, zstep, zmax, feedxy, feedz, toolD, stepover, rpm):
 	#Do some basic sanity checks
 	if(feedxy <= 0):
 		print "ERROR: FeedXY must be positive."
@@ -187,20 +220,6 @@ def generate(curves, zsafe, zmin, zstep, zmax, feedxy, feedz, toolD, stepover, r
 		return ""
 	#Don't try to check IPT or zstep relative to toolD- assume user knows
 	#what they're doing. We don't know their setup or material
-	
-	#G90 (absolute mode)
-	#G91.1 (relative offsets for arcs)
-	#G94 (Units per minute mode)
-	#G97 S<SPEED> (Spindle speed in RPM)
-	#G21 (mm units)
-	#G40 (no cutter comp)
-	#G64 P0.01 (set path tolerance to 0.01 mm of specified)
-	#G17 (use XY plane)
-	
-	
-	
-	#FIXME: Add M[345] spindle control commands
-	#FIXME: Make path tolerance an argument
 	
 	setZsafe(zsafe)
 	setFeedXY(feedxy)
@@ -218,9 +237,12 @@ def generate(curves, zsafe, zmin, zstep, zmax, feedxy, feedz, toolD, stepover, r
 	cmds += "G17\t(Use XY plane for arcs)\n"
 	cmds += "\n"
 	
+	#FIXME: Add M[345] spindle control commands
+	#FIXME: Make path tolerance an argument
 	
 	
-	#FIXME: Will need to iterate over this
+	
+	#FIXME: Will need to iterate over this- well, maybe  INSIDE the curve loop
 	workZ = max(zmax - zstep, zmin)
 	for c in curves:
 		verts = c.getVertices()
@@ -231,66 +253,22 @@ def generate(curves, zsafe, zmin, zstep, zmax, feedxy, feedz, toolD, stepover, r
 		#Set our starting "previous" point
 		last = verts[0].p
 		
-		#FIXME: Rapid move down to a little bit above the actual start of
-		#the cut!
-		
-		#Straight plunge- hard on tools. Don't do this if it can be avoided
-		if plungeType == plungeStraight:
-			#Go to the start of the curve
-			cmds += rapid(verts[0].p.x, verts[0].p.y)
-			cmds += feed(z=workZ)
 		#Helical plunge- good! Assuming there's space to do it...
-		elif plungeType == plungeHelical:
-			plungePos = helixPos(c, toolD)
-			if plungePos == None:
-				#FIXME: Go to linear ramp- not straight
-				print "Couldn't find place to helix-plunge- defaulting to straight. FIXME!"
-				cmds += rapid(verts[0].p.x, verts[0].p.y)
-				cmds += feed(z=workZ)
-			else:
-				print "Should be able to helically plunge at " + str(plungePos.x) + ", " + str(plungePos.y)
-				#FIXME: Want this fudge-factor in there? Constant offset? Variable?
-				#Probably want SOMETHING so that we don't end up with a little chunk left in the middle
-				fudge = 0.95
-				helixX = plungePos.x + toolD/2. * fudge
-				helixY = plungePos.y;
-				
-				#FIXME: Probably want variable ramp angle
-				#Degrees
-				rampAngle = 5
-				helixCirc = math.pi * toolD * fudge
-				dzPerRev = math.sin(rampAngle/180. * math.pi) * helixCirc
-				
-				#Go to the start of the helix position
-				cmds += rapid(helixX, helixY)
-				
-				#FIXME: Iterate over Z here
-				#FIXME: These will need to change!
-				destZ = workZ
-				curZ = max(zsafe - dzPerRev, destZ)
-				done = False
-				while not done:
-					done = (curZ == destZ)
-					cmds += arc(plungePos.x, plungePos.y, helixX, helixY, helixX, helixY, ez = curZ, ccw=True)
-					curZ = max(curZ - dzPerRev, destZ)
-				
-				cmds += feed(c.getVertices()[0].p.x, c.getVertices()[0].p.y)
-				
-				#FIXME: Remember to move back to the start of the curve!
-				#This is really important... Maybe not the start of the
-				#curve, but SOMEWHERE on it. And then somehow reset where
-				#the start is so it machines everything out.
-		#Linear ramp plunge- fallback from helical. Or if requested.
-		elif plungeType == plungeRamp:
-			#Go to the start of the curve
-			cmds += rapid(verts[0].p.x, verts[0].p.y)
-			print "Linear ramp plunging not supported; aborting"
-			return ""
-		else:
-			print "Unknown plunge argument passed: " + str(plungeType)
-			print "Aborting"
-			return ""
+		#FIXME: This "zmax" bit will probably need to change...
+		plungeCmds = helicalPlunge(c, toolD, 5, workZ, zmax)
 		
+		#If helix feed doesn't work, try linear ramp
+		if(plungeCmds == None):
+			print "FIXME: Implement ramp!!!!"
+		
+		#if linear ramp fails for some reason, default to straight plunge
+		if(plungeCmds == None):
+			plungeCmds = rapid(verts[0].p.x, verts[0].p.y)
+			plungeCmds += rapid(z=zmax) #FIXME: zmax will need to change
+			plungeCmds += feed(z=workZ)
+		
+		#Add the plunge to the command list
+		cmds += plungeCmds
 		
 		i = 1
 		#Get a fresh copy of vertices- we've tweaked them with plunges!

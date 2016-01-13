@@ -66,7 +66,7 @@ parser.add_argument("outputfile", metavar="OUT.ngc", type=str, help='GCode outpu
 parser.add_argument("--climb", dest="climb", action="store_true", help="Use climb milling instead of conventional (default: conventional)")
 parser.add_argument("-c","--cutdepth", metavar="DEPTH", default=DEFAULT_CUTDEPTH, type=float, help=("Sets the cut depth of each pass (mm) for machining. Default ToolD/2 mm"))
 parser.add_argument("-f","--feed", metavar="FEED", default=DEFAULT_FEED, type=float, help=("Sets the feed rate (mm/min) for machining in the XY plane. Default " + str(DEFAULT_FEED) + " mm/min"))
-parser.add_argument("--helix", dest="helix", action="store_true", help="Enable helical plunging (EXPERIMENTAL) (default: straight plunge)")
+#parser.add_argument("--helix", dest="helix", action="store_true", help="Enable helical plunging (EXPERIMENTAL) (default: straight plunge)")
 parser.add_argument("-s","--stepover", metavar="STEP", default=DEFAULT_STEPOVER, type=float, help=("Sets how much lateral material is removed per pass (mm). Default ToolD/2 mm"))
 parser.add_argument("-t","--toold", metavar="DIA", default=DEFAULT_TOOLD, type=float, help=("Sets the tool diameter (mm). Default " + str(DEFAULT_TOOLD) + " mm"))
 parser.add_argument("-w","--rpm", metavar="RPM", default=DEFAULT_TOOLD, type=int, help=("Sets the spindle angular velocity (RPM). Default " + str(DEFAULT_RPM) + " RPM"))
@@ -83,10 +83,10 @@ rpm = args.rpm
 climb = args.climb
 
 #This may need to be handled differently if we support linear ramps
-if args.helix:
-	plungetype = gcode.plungeHelical
-else:
-	plungetype = gcode.plungeStraight
+#if args.helix:
+#	plungetype = gcode.plungeHelical
+#else:
+#	plungetype = gcode.plungeStraight
 
 #Output file may need special handling- if not passed, use input filename,
 #replacing ".dxf" with".ngc"
@@ -309,8 +309,8 @@ for p in curvelist:
 
 #Generate actual gcode listing
 print "Generating gcode"
-#def generate(curves, zsafe, zmin, zstep, zmax, feedxy, feedz, toolD, stepover, rpm, plungeType):
-cmds = gcode.generate(curvelist, zsafe, 0, 0.5, 1, feed, 50, toold, stepover, rpm, plungetype)
+#def generate(curves, zsafe, zmin, zstep, zmax, feedxy, feedz, toolD, stepover, rpm):
+cmds = gcode.generate(curvelist, zsafe, 0, 0.5, 1, feed, 50, toold, stepover, rpm)
 
 #Write it out to a file
 print "Writing file"
