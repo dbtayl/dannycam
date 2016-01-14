@@ -302,7 +302,7 @@ def sumLength(curve):
 
 for p in curvelist:
 	#print "Curvelist iteration"
-	addLine(p,3)
+	addLine(p,2)
 	pathlength += sumLength(p)
 
 
