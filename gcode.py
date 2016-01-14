@@ -179,7 +179,56 @@ def helicalPlunge(curve, toolD, rampangle, destZ, startZ):
 	helixCmds += feed(curve.getVertices()[0].p.x, curve.getVertices()[0].p.y)
 	
 	return helixCmds
+
+
+def rampPlunge(curve, toolD, rampangle, destZ, startZ):	
+	#How long our desired ramp is
+	rampLen = toolD #FIXME: Should have this configurable
 	
+	verts = curve.getVertices()
+	
+	#If the first segment isn't long enough, give up
+	#FIXME: This is dumb
+	dist = verts[0].p.dist(verts[1].p)
+	if dist < toolD:
+		print "FIXME: Ramp failure for stupid reasons"
+		return None
+	
+	startP = verts[0].p
+	
+	#Otherwise, iterate back and forth along the path
+	#Want to ramp by toolD, so normalize vector
+	vect = verts[1].p - verts[0].p
+	vect.normalize()
+	vect *= toolD
+	
+	endP = startP + vect
+	
+	dzPerRamp = math.sin(rampangle/180. * math.pi) * rampLen
+	
+	cmd = ""
+	
+	#Start by rapid-moving to the start location
+	cmd += rapid(startP.x, startP.y)
+	cmd += rapid(z=startZ)
+	
+	#Rapid down most of the way to the cut
+	
+	curZ = max(startZ-dzPerRamp, destZ)
+	while curZ > destZ:
+		#Linear feed
+		if verts[1].type == 0:
+			cmd += feed(endP.x, endP.y, curZ)
+			cmd += feed(startP.x, startP.y)
+		#CCW arc
+		else
+			t = verts[1].type
+			cmd += arc(verts[1].c.x, verts[1].c.y, startP.x, startP.y, endP.x, endP.y, ez=curZ, ccw=(t == 1))
+			cmd += arc(verts[1].c.x, verts[1].c.y, endP.x, endP.y, startP.x, startP.y, ccw=(t == -1))
+			
+		curZ = max(curZ - dzPerRamp, destZ)
+	
+	return cmd
 	
 	
 
@@ -242,7 +291,7 @@ def generate(curves, zsafe, zmin, zstep, zmax, feedxy, feedz, toolD, stepover, r
 		
 		#If helix feed doesn't work, try linear ramp
 		if(plungeCmds == None):
-			print "FIXME: Implement ramp!!!!"
+			plungeCmds = rampPlunge(c, toolD, 5, workZ, zmax)
 		
 		#if linear ramp fails for some reason, default to straight plunge
 		if(plungeCmds == None):
@@ -261,7 +310,7 @@ def generate(curves, zsafe, zmin, zstep, zmax, feedxy, feedz, toolD, stepover, r
 			#Linear feed
 			if verts[i].type == 0:
 				cmds += feed(verts[i].p.x, verts[i].p.y)
-			#Arc; CW = 1, CCW = -1
+			#Arc; CCW = 1, CW = -1
 			elif abs(verts[i].type) == 1:
 				ccw = (verts[i].type == 1)
 				cmds += arc(verts[i].c.x, verts[i].c.y, verts[i-1].p.x, verts[i-1].p.y, verts[i].p.x, verts[i].p.y, ccw=ccw)

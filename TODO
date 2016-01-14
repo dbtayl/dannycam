@@ -4,6 +4,7 @@ Possibly incomplete or out-of-date TODO list
 -Finishing passes
 -Ramping into material (plunges)
 	-Helical theoretically implemented, needs testing
+	-Linear ramps partially implemented
 -Ramping into material (clearing pockets, same-Z)
 -Less abrupt direction changes- eg, arcs between line segments
 -Handling 3D files (maybe someday)
