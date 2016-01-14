@@ -291,10 +291,7 @@ def generate(curves, zsafe, zmin, zstep, zmax, feedxy, feedz, toolD, stepover, r
 		#If helix feed doesn't work, try linear ramp
 		if(plungeCmds == None):
 			plungeCmds = rampPlunge(c, toolD, 5, workZ, zmax)
-<<<<<<< HEAD
-=======
-			print "FIXME: Implement ramp!!!!"
->>>>>>> 3a298a3f75670f1e04cad25fe73b3c1d04c223e7
+
 		
 		#if linear ramp fails for some reason, default to straight plunge
 		if(plungeCmds == None):
