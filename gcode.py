@@ -221,7 +221,7 @@ def rampPlunge(curve, toolD, rampangle, destZ, startZ):
 			cmd += feed(endP.x, endP.y, curZ)
 			cmd += feed(startP.x, startP.y)
 		#CCW arc
-		else
+		else:
 			t = verts[1].type
 			cmd += arc(verts[1].c.x, verts[1].c.y, startP.x, startP.y, endP.x, endP.y, ez=curZ, ccw=(t == 1))
 			cmd += arc(verts[1].c.x, verts[1].c.y, endP.x, endP.y, startP.x, startP.y, ccw=(t == -1))
@@ -303,7 +303,7 @@ def generate(curves, zsafe, zmin, zstep, zmax, feedxy, feedz, toolD, stepover, r
 		cmds += plungeCmds
 		
 		i = 1
-		#Get a fresh copy of vertices- we've tweaked them with plunges!
+		#Get a fresh copy of vertices- we've (maybe) tweaked them with plunges!
 		#FIXME: There has to be a better way to do this
 		verts = c.getVertices()
 		while i < len(verts):
